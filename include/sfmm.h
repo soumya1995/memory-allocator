@@ -151,7 +151,7 @@ void *sf_realloc(void *ptr, size_t size);
  * @param ptr Address of memory returned by the function sf_malloc.
  *
  * If ptr is invalid, the function calls abort() to exit the program.
- */+
+ */
 void sf_free(void *ptr);
 
 /* sfutil.c: Helper functions already created for this assignment. */

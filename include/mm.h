@@ -5,40 +5,47 @@
 
 #define WSIZE 2
 #define DSIZE 4
-#define CHUNKSIZE (1<<12)
 #define MEMROW 8
 #define MEMALIGN 16
 #define PAGE 4096
-#define EINVAL 22  /* Invalid argument */
 
-#define MAX(x,y) ((x) > (y)? (x):(y))
 
-/*PACK A SIZE AND ALLOCATED BIT INTO A WORD*/
-#define PACK(size, alloc) ((size) | (alloc))
+#define IS_HEAP_START(hdrp)(hdrp==get_heap_start())
+#define IS_HEAP_END(hdrp)(hdrp == get_heap_end())
 
-/*READ AND WRITE A WORDAT ADDRESS p*/
-#define GET(p)  (*(unsigned int *)(p))
-#define PUT(p, val)  (*(unsigned int *)(p) = val)
+#define GET_SF_HEADER(hdrp)((sf_header*)hdrp)
+#define GET_SF_FOOTER(ftrp)((sf_footer*)ftrp)
+#define GET_SF_FREE_HEADER(hdrp)((sf_free_header*)hdrp)
 
-/*READ THE SIZE AND ALLOCATED FIELDS FROM ADDRESS p*/
-#define GET_SIZE(p)  (GET(p) & ~0x7)
-#define GET_ALLOC(p)  (GET(p) & 0x1)
+#define GET_BLOCK_SIZE(hdrp)(GET_SF_HEADER(hdrp)->block_size << 4)
+#define SET_BLOCK_SIZE(hdrp, size)(GET_SF_HEADER(hdrp)->block_size = (size>>4))
 
-/*GIVEN BLOCK POINTER bp, COMPUTE ADDRESS OF ITS HEADER AND FOOTER*/
-#define HDRP(bp)  ((char *)(bp) - WSIZE)
-#define FTRP(bp)  ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
+#define HDR2PAYLOAD(hdrp)((char*)hdrp+SF_HEADER_SIZE)
+#define PAYLOAD2HDR(plrp)((char*)plrp-SF_HEADER_SIZE)
 
-/*GIVEN BLOCK POINTER bp, COMPUTE ADDRESS OF NEXT AND PREVIOUS BLOCK*/
-#define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
-#define PREV_BLKP(BP)  ((char *)(bp) + GET_SIZE(((char *)(bp) - DSIZE)))
+#define HDR2FTR(hdrp)((char*)hdrp+GET_BLOCK_SIZE(hdrp)-SF_FOOTER_SIZE)
+#define FTR2HDR(ftrp)((char*)ftrp-GET_BLOCK_SIZE(ftrp)+SF_FOOTER_SIZE)
+
+#define NEXTHDR(hdrp)((char*)hdrp+GET_BLOCK_SIZE(hdrp))
+#define PREVHDR(hdrp)((char*)hdrp-(GET_BLOCK_SIZE((char*)hdrp-SF_FOOTER_SIZE)))
 
 /*SEARCHES FREE LIST FOR A FIT */
-void *find_fit(size_t size);
+sf_free_header *find_fit(size_t size);
 
 void place(void *bp, size_t size);
 
 void *extend_heap();
 
-void *coalesce(void *bp);
+sf_free_header *coalesce(sf_free_header *bp, int mode);
+
+sf_free_header *coalesce_helper(sf_free_header *hdr, sf_free_header *bp);
+
+sf_free_header *find(int list, size_t size);
+
+void remove_from_seglist(sf_free_header *bp);
+
+void remove_list_helper(sf_free_header *hdr, int list);
+
+void add_to_seglist(sf_free_header *bp);
 
 #endif
