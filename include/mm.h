@@ -18,7 +18,10 @@
 #define GET_SF_FREE_HEADER(hdrp)((sf_free_header*)hdrp)
 
 #define GET_BLOCK_SIZE(hdrp)(GET_SF_HEADER(hdrp)->block_size << 4)
-#define SET_BLOCK_SIZE(hdrp, size)(GET_SF_HEADER(hdrp)->block_size = (size>>4))
+#define SET_BLOCK_SIZE(hdrp,size)(GET_SF_HEADER(hdrp)->block_size = (size>>4))
+
+#define GET_BLOCK_FOOTER_SIZE(hdrp)(GET_SF_FOOTER(hdrp)->block_size << 4)
+#define SET_BLOCK_FOOTER_SIZE(hdrp,size)(GET_SF_FOOTER(hdrp)->block_size = (size>>4))
 
 #define HDR2PAYLOAD(hdrp)((char*)hdrp+SF_HEADER_SIZE)
 #define PAYLOAD2HDR(plrp)((char*)plrp-SF_HEADER_SIZE)
@@ -32,20 +35,24 @@
 /*SEARCHES FREE LIST FOR A FIT */
 sf_free_header *find_fit(size_t size);
 
-void place(void *bp, size_t size);
+sf_free_header *find(int list, size_t size);
 
-void *extend_heap();
+void *set_header_footer_allocblk(sf_free_header *bp, size_t size, size_t asize);
+
+sf_free_header *extend_heap();
 
 sf_free_header *coalesce(sf_free_header *bp, int mode);
 
 sf_free_header *coalesce_helper(sf_free_header *hdr, sf_free_header *bp);
-
-sf_free_header *find(int list, size_t size);
 
 void remove_from_seglist(sf_free_header *bp);
 
 void remove_list_helper(sf_free_header *hdr, int list);
 
 void add_to_seglist(sf_free_header *bp);
+
+void add_list_helper(sf_free_header *hdr, int list);
+
+sf_free_header *split(sf_free_header *bp, size_t size);
 
 #endif
