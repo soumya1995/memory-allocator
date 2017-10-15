@@ -1,7 +1,6 @@
 #include <criterion/criterion.h>
 #include <errno.h>
 #include <signal.h>
-#include <stdio.h>
 #include "sfmm.h"
 
 

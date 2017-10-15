@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <string.h>
 #include "mm.h"
 
 /**
@@ -38,7 +39,7 @@ void *sf_malloc(size_t size) {
         return NULL;
     }
 
-    //ADJUST THE BLACK SIZE AND ALIGNMENT
+    //ADJUST THE BLOCK SIZE AND ALIGNMENT
     if(size <= MEMALIGN)
         asize = 2*MEMROW + MEMALIGN;
     else
@@ -71,7 +72,6 @@ void *set_header_footer_allocblk(sf_free_header *bp, size_t size, size_t asize){
     /*SET FOOTER BLK SIZE*/
     SET_BLOCK_FOOTER_SIZE(ftr_ptr, asize);
 
-        //printf("done split\n");
     /*SET ALOCATED BITS TO 1*/
     head_ptr->allocated = 1;
     ftr_ptr->allocated = 1;
@@ -283,7 +283,8 @@ sf_free_header *split(sf_free_header *bp, size_t size){
     size_t blk_size1 = size;
     size_t blk_size2 = 0;
 
-    remove_from_seglist(bp);
+    if(bp->header.allocated == 0)
+        remove_from_seglist(bp);
 
     if((blk_size2 = (GET_BLOCK_SIZE(&(bp->header)) - size))>=32){
 
@@ -300,8 +301,11 @@ sf_free_header *split(sf_free_header *bp, size_t size){
         //sf_footer *ftrp2 = GET_SF_FOOTER(HDR2FTR(&(hdrp2->header)));
         //SET_BLOCK_FOOTER_SIZE(ftrp2, blk_size2);
 
-        //PUT THE SPLITTED FREE BLOCK BACK INTO THE FREE LIST
+        //COALESING IF POSSIBLE AND PUTTING THE FREE BLOCK IN FREE LIST
+        //coalesce(bp, 1);
         add_to_seglist(hdrp2);
+
+
     }
 
     return bp;
@@ -311,7 +315,78 @@ sf_free_header *split(sf_free_header *bp, size_t size){
 
 
 void *sf_realloc(void *ptr, size_t size) {
-	return NULL;
+
+    /*CHECK FOR INVALID POINTER*/
+    if(ptr == NULL)
+        abort();
+    if(ptr<get_heap_start() || get_heap_end()<(void*)(HDR2FTR(ptr)+(SF_FOOTER_SIZE/8)))
+        abort();
+
+    sf_header *hdr = GET_SF_HEADER(PAYLOAD2HDR(ptr));
+    sf_footer *ftr = GET_SF_FOOTER(HDR2FTR(hdr));
+
+    if(hdr->allocated == 0 || ftr->allocated == 0)
+        abort();
+
+    if((is_block_padded(ftr) == 1 && hdr->padded == 0) || (is_block_padded(ftr) == 0 && hdr->padded == 1) || (is_block_padded(ftr) == 1 && hdr->padded == 0) || (is_block_padded(ftr) == 0 && hdr->padded == 1)){
+        abort();
+    }
+
+    if(hdr->padded != ftr->padded || hdr->allocated != ftr->allocated)
+        abort();
+
+    if(size == 0){
+
+        sf_free(ptr);
+        return NULL;
+    }
+
+    sf_header *ptr_hdr = GET_SF_HEADER(PAYLOAD2HDR(ptr));
+    sf_footer *ptr_ftr = GET_SF_FOOTER(HDR2FTR(ptr_hdr));
+
+    /*REALLOCATING TO A LARGER SIZE*/
+    if(ptr_ftr->requested_size<size){
+
+       void* new_ptr = sf_malloc(size);
+
+       sf_header *new_ptr_hdr = GET_SF_HEADER(PAYLOAD2HDR(new_ptr));
+       memcpy(HDR2PAYLOAD(new_ptr_hdr),HDR2PAYLOAD(ptr_hdr),ptr_ftr->requested_size);
+
+       sf_free(ptr);
+       return new_ptr;
+    }
+
+    /*REALLOCATING TO A SMALLER SIZE*/
+    else if(ptr_ftr->requested_size>size){
+
+        /*IF SPLITING MAKES SPLINTER*/
+        if(ptr_ftr->requested_size-size<32){
+            ptr_ftr->requested_size = size;
+            return ptr;
+        }
+
+        /*IF SPLITTING DOESN'T FORM SPLINTER*/
+        else{
+
+            size_t asize;
+            //ADJUST THE BLOCK SIZE AND ALIGNMENT
+            if(size <= MEMALIGN)
+                asize = 2*MEMROW + MEMALIGN;
+            else
+                asize = (((size+MEMALIGN-1)/MEMALIGN)*MEMALIGN) + (2*MEMROW);
+
+             split(GET_SF_FREE_HEADER(ptr_hdr), asize);
+
+             sf_free_header *next_free_hdr = GET_SF_FREE_HEADER(NEXTHDR(ptr_hdr));
+             coalesce(next_free_hdr,1);
+
+            return set_header_footer_allocblk(GET_SF_FREE_HEADER(ptr_hdr), size, asize);
+        }
+    }
+
+    else
+        return ptr;
+
 }
 
 void sf_free(void *ptr) {
