@@ -1,6 +1,7 @@
 #include <criterion/criterion.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdio.h>
 #include "sfmm.h"
 
 
@@ -55,8 +56,8 @@ Test(sf_memsuite_student, free_no_coalesce, .init = sf_mem_init, .fini = sf_mem_
 	sf_errno = 0;
 	/* void *x = */ sf_malloc(sizeof(long));
 	void *y = sf_malloc(sizeof(double) * 10);
-	/* void *z = */ sf_malloc(sizeof(char));
 
+	/* void *z = */ sf_malloc(sizeof(char));
 	sf_free(y);
 
 	free_list *fl = &seg_free_list[find_list_index_from_size(96)];

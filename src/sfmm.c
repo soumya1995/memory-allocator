@@ -87,7 +87,7 @@ void *set_header_footer_allocblk(sf_free_header *bp, size_t size, size_t asize){
         ftr_ptr->padded = 0;
     }
 
-    else{
+    else if((size%16)!=0){
 
         head_ptr->padded = 1;
         ftr_ptr->padded = 1;
@@ -153,12 +153,13 @@ sf_free_header *coalesce(sf_free_header *bp, int mode){
 
     /*mode IS 1 COLEASE WITH HIGHER ADDRESS*/
     else{
-
         if(IS_HEAP_END(bp))
             return bp;
         hdr = GET_SF_FREE_HEADER(NEXTHDR(bp));
-        if(hdr->header.allocated)
+        if(hdr->header.allocated){
+            add_to_seglist(bp);
             return bp;
+        }
 
         return coalesce_helper(bp, hdr);
     }
@@ -315,20 +316,22 @@ void *sf_realloc(void *ptr, size_t size) {
 
 void sf_free(void *ptr) {
 
+
     /*CHECK FOR INVALID POINTER*/
     if(ptr == NULL)
         abort();
     if(ptr<get_heap_start() || get_heap_end()<(void*)(HDR2FTR(ptr)+(SF_FOOTER_SIZE/8)))
         abort();
 
-    sf_header *hdr = GET_SF_HEADER(ptr);
+    sf_header *hdr = GET_SF_HEADER(PAYLOAD2HDR(ptr));
     sf_footer *ftr = GET_SF_FOOTER(HDR2FTR(hdr));
 
     if(hdr->allocated == 0 || ftr->allocated == 0)
         abort();
 
-    if((is_block_header_padded(hdr) == 1 && hdr->padded == 0) || (is_block_header_padded(hdr) == 0 && hdr->padded == 1) || (is_block_footer_padded(ftr) == 1 && hdr->padded == 0) || (is_block_footer_padded(ftr) == 0 && hdr->padded == 1))
+    if((is_block_padded(ftr) == 1 && hdr->padded == 0) || (is_block_padded(ftr) == 0 && hdr->padded == 1) || (is_block_padded(ftr) == 1 && hdr->padded == 0) || (is_block_padded(ftr) == 0 && hdr->padded == 1)){
         abort();
+    }
 
     if(hdr->padded != ftr->padded || hdr->allocated != ftr->allocated)
         abort();
@@ -340,18 +343,12 @@ void sf_free(void *ptr) {
 	return;
 }
 
-int is_block_header_padded(void *ptr){ //NOT SURE IF I SHOULD MAKE SEPARATE FOR HEADER N FOOTER
+int is_block_padded(void *ptr){ //NOT SURE IF I SHOULD MAKE SEPARATE FOR HEADER N FOOTER
 
-    if(((GET_SF_HEADER(ptr)->block_size)%16) == 0)
+    if(((GET_SF_FOOTER(ptr)->requested_size)%16) == 0)
         return 0;
     else
         return 1;
 }
 
-int is_block_footer_padded(void *ptr){
 
-    if(((GET_SF_FOOTER(ptr)->block_size)%16) == 0)
-        return 0;
-    else
-        return 1;
-}

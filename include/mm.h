@@ -56,8 +56,7 @@ void add_list_helper(sf_free_header *hdr, int list);
 
 sf_free_header *split(sf_free_header *bp, size_t size);
 
-int is_block_header_padded(void *ptr);
+int is_block_padded(void *ptr);
 
-int is_block_footer_padded(void *ptr);
 
 #endif
