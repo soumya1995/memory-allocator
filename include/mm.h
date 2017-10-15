@@ -10,6 +10,7 @@
 #define PAGE 4096
 
 
+
 #define IS_HEAP_START(hdrp)(hdrp==get_heap_start())
 #define IS_HEAP_END(hdrp)(hdrp == get_heap_end())
 
@@ -23,14 +24,14 @@
 #define GET_BLOCK_FOOTER_SIZE(hdrp)(GET_SF_FOOTER(hdrp)->block_size << 4)
 #define SET_BLOCK_FOOTER_SIZE(hdrp,size)(GET_SF_FOOTER(hdrp)->block_size = (size>>4))
 
-#define HDR2PAYLOAD(hdrp)((char*)hdrp+SF_HEADER_SIZE)
-#define PAYLOAD2HDR(plrp)((char*)plrp-SF_HEADER_SIZE)
+#define HDR2PAYLOAD(hdrp)((char*)hdrp+(SF_HEADER_SIZE/8))
+#define PAYLOAD2HDR(plrp)((char*)plrp-(SF_HEADER_SIZE/8))
 
-#define HDR2FTR(hdrp)((char*)hdrp+GET_BLOCK_SIZE(hdrp)-SF_FOOTER_SIZE)
-#define FTR2HDR(ftrp)((char*)ftrp-GET_BLOCK_SIZE(ftrp)+SF_FOOTER_SIZE)
+#define HDR2FTR(hdrp)((char*)(hdrp)+GET_BLOCK_SIZE(hdrp)-(SF_FOOTER_SIZE/8))
+#define FTR2HDR(ftrp)((char*)ftrp-GET_BLOCK_SIZE(ftrp)+(SF_FOOTER_SIZE/8))
 
 #define NEXTHDR(hdrp)((char*)hdrp+GET_BLOCK_SIZE(hdrp))
-#define PREVHDR(hdrp)((char*)hdrp-(GET_BLOCK_SIZE((char*)hdrp-SF_FOOTER_SIZE)))
+#define PREVHDR(hdrp)((char*)hdrp-(GET_BLOCK_FOOTER_SIZE((char*)hdrp-(SF_FOOTER_SIZE/8))))
 
 /*SEARCHES FREE LIST FOR A FIT */
 sf_free_header *find_fit(size_t size);
@@ -54,5 +55,9 @@ void add_to_seglist(sf_free_header *bp);
 void add_list_helper(sf_free_header *hdr, int list);
 
 sf_free_header *split(sf_free_header *bp, size_t size);
+
+int is_block_header_padded(void *ptr);
+
+int is_block_footer_padded(void *ptr);
 
 #endif

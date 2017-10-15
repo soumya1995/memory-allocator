@@ -22,7 +22,7 @@ free_list seg_free_list[4] = {
 };
 
 /*NUMBER OF PAGES ALLOCATED*/
-int pages = 1;
+int pages = 0;
 
 int sf_errno = 0;
 
@@ -33,7 +33,7 @@ void *sf_malloc(size_t size) {
     sf_free_header *bp;
 
     /*IGNORE IF SIZE IS ZERO OR GREATER THAN PAGE SIZE*/
-    if(size == 0 || size>PAGE){
+    if(size == 0 || size>(PAGE*4)){
         sf_errno =  EINVAL;
         return NULL;
     }
@@ -44,22 +44,34 @@ void *sf_malloc(size_t size) {
     else
         asize = (((size+MEMALIGN-1)/MEMALIGN)*MEMALIGN) + (2*MEMROW);
 
+
     //SEARCH FREE LISTS FOR A FIT
     if((bp = find_fit(asize))!= NULL){
+
+
         if(GET_BLOCK_SIZE(bp)>asize) /*IF THE BLOCK SIZE OF THE FREE BLOCK IS GREATER THAN THE ADJUSTED SIZE SPLIT IT*/
             bp = split(bp, asize);
+
         return set_header_footer_allocblk(bp, size, asize);
 
     }
 
+    /*WHEN THE ALLOCATOR CANNOT SATISY REQUEST AND RETURNS NULL*/
+    sf_errno = ENOMEM;
 	return NULL;
 }
 
 void *set_header_footer_allocblk(sf_free_header *bp, size_t size, size_t asize){
 
+
+
     sf_header *head_ptr = &(bp->header);
     sf_footer *ftr_ptr = GET_SF_FOOTER(HDR2FTR(head_ptr));
 
+    /*SET FOOTER BLK SIZE*/
+    SET_BLOCK_FOOTER_SIZE(ftr_ptr, asize);
+
+        //printf("done split\n");
     /*SET ALOCATED BITS TO 1*/
     head_ptr->allocated = 1;
     ftr_ptr->allocated = 1;
@@ -91,7 +103,6 @@ void *set_header_footer_allocblk(sf_free_header *bp, size_t size, size_t asize){
 sf_free_header *extend_heap(){
 
     char *bp;
-    //size_t size = PAGE;
 
     if(pages>4){
         sf_errno = ENOMEM;
@@ -102,22 +113,30 @@ sf_free_header *extend_heap(){
         return NULL;
 
     pages++; //KEEP RECORD OF PAGES USED
+    if(pages!=1){
+        sf_free_header *hdr_free =GET_SF_FREE_HEADER(bp);
+        SET_BLOCK_SIZE(&(hdr_free->header),PAGE_SZ);
+        sf_free_header *hdr_prev = GET_SF_FREE_HEADER(PREVHDR(hdr_free));
+        if(hdr_prev->header.allocated){ /*If previous block is allocated put hdr_free in free list*/
+            add_to_seglist(hdr_free);
+            return hdr_free;
+        }
+        else /*IF PREVIOUS BLOCK IS FREE COALESCE hdr_free with hdr_prev*/
+            return coalesce(hdr_free, 0);
 
-    sf_free_header *hdr_free =GET_SF_FREE_HEADER(bp);
-    sf_free_header *hdr_prev = GET_SF_FREE_HEADER(PREVHDR(hdr_free));
+    }
 
-    if(hdr_prev->header.allocated){ /*If previous block is allocated put hdr_free in free list*/
+    else{
+
+        sf_free_header *hdr_free =GET_SF_FREE_HEADER(bp);
+        SET_BLOCK_SIZE(&(hdr_free->header), PAGE_SZ);
         add_to_seglist(hdr_free);
         return hdr_free;
     }
-    else /*IF PREVIOUS BLOCK IS FREE COALESCE hdr_free with hdr_prev*/
-        return coalesce(hdr_free, 0);
-
-    }
+}
 
 
 sf_free_header *coalesce(sf_free_header *bp, int mode){
-
 
 
     sf_free_header *hdr = NULL;
@@ -151,14 +170,10 @@ sf_free_header *coalesce_helper(sf_free_header *hdr, sf_free_header *bp){
     remove_from_seglist(hdr);
     remove_from_seglist(bp);
 
-    sf_footer *newftrp = GET_SF_FOOTER(HDR2FTR(bp));
-    SET_BLOCK_SIZE(hdr,((GET_BLOCK_SIZE(hdr)-SF_FOOTER_SIZE)+(GET_BLOCK_SIZE(bp)-SF_HEADER_SIZE)));
-    SET_BLOCK_FOOTER_SIZE(newftrp, ((GET_BLOCK_SIZE(hdr)-SF_FOOTER_SIZE)+(GET_BLOCK_SIZE(bp)-SF_HEADER_SIZE)));
 
-    /*if(hdr->header.padded == 1 || bp->header.padded == 1){
-        hdr->header.padded = 1;
-        newftrp->padded = 1;
-    }*/
+    sf_footer *newftrp = GET_SF_FOOTER(HDR2FTR(&(bp->header)));
+    SET_BLOCK_SIZE(hdr,(GET_BLOCK_SIZE(&(hdr->header))+GET_BLOCK_SIZE(&(bp->header))));
+    SET_BLOCK_FOOTER_SIZE(newftrp, (GET_BLOCK_SIZE(&(hdr->header))+GET_BLOCK_SIZE(&(bp->header))));
 
     add_to_seglist(hdr);
 
@@ -206,6 +221,7 @@ void remove_list_helper(sf_free_header *hdr, int list){
 
 void add_to_seglist(sf_free_header *hdr){
 
+
     int size = GET_BLOCK_SIZE(hdr);
     if(size<=LIST_1_MAX)
         add_list_helper(hdr, 0);
@@ -228,17 +244,20 @@ void add_list_helper(sf_free_header *hdr, int list){
 
 sf_free_header *find_fit(size_t size){
 
-    void *blk;
+
+    sf_free_header *blk;
 
     if(size<32)
         return NULL;
-    for (int i = 0; i < FREE_LIST_COUNT; ++i)//not sure yet
+    int i=0;
+    for (i = 0; i < FREE_LIST_COUNT; i++)//not sure yet
     {
         if((blk = find(i,size))!=NULL)
             return blk;
     }
-    if(extend_heap()!=NULL)
+    if(extend_heap()!=NULL){
         return find_fit(size);
+    }
     return NULL;
 
 }
@@ -249,8 +268,9 @@ sf_free_header *find(int list, size_t size){
     sf_free_header *node = NULL;
 
     for(node = head_ptr;node!=NULL;node = node->next){
-        if(GET_BLOCK_SIZE(&(node->header))>=size)
+        if(GET_BLOCK_SIZE(&(node->header))>=size){
             return node;
+        }
     }
 
     return NULL;
@@ -258,24 +278,26 @@ sf_free_header *find(int list, size_t size){
 
 sf_free_header *split(sf_free_header *bp, size_t size){
 
+
     size_t blk_size1 = size;
     size_t blk_size2 = 0;
 
     remove_from_seglist(bp);
 
-    if((blk_size2 = (GET_BLOCK_SIZE(bp) - size))>=32){
+    if((blk_size2 = (GET_BLOCK_SIZE(&(bp->header)) - size))>=32){
 
         /*FIRST FREE BLOCK*/
         sf_free_header *hdrp1 = GET_SF_FREE_HEADER(bp);
-        SET_BLOCK_SIZE(hdrp1, blk_size1);
-        sf_footer *ftrp1 = GET_SF_FOOTER(HDR2FTR(hdrp1));
-        SET_BLOCK_FOOTER_SIZE(ftrp1, blk_size1);
+        SET_BLOCK_SIZE(&(hdrp1->header), blk_size1);
+       // sf_footer *ftrp1 = GET_SF_FOOTER(HDR2FTR(&(hdrp1->header)));
+
+       // SET_BLOCK_FOOTER_SIZE(ftrp1, blk_size1);
 
         /*SECOND FREE BLOCK*/
-        sf_free_header *hdrp2 = GET_SF_FREE_HEADER(NEXTHDR(hdrp1));
-        SET_BLOCK_SIZE(hdrp2, blk_size2);
-        sf_footer *ftrp2 = GET_SF_FOOTER(HDR2FTR(hdrp2));
-        SET_BLOCK_FOOTER_SIZE(ftrp2, blk_size2);
+        sf_free_header *hdrp2 = GET_SF_FREE_HEADER(NEXTHDR(&(hdrp1->header)));
+        SET_BLOCK_SIZE(&(hdrp2->header), blk_size2);
+        //sf_footer *ftrp2 = GET_SF_FOOTER(HDR2FTR(&(hdrp2->header)));
+        //SET_BLOCK_FOOTER_SIZE(ftrp2, blk_size2);
 
         //PUT THE SPLITTED FREE BLOCK BACK INTO THE FREE LIST
         add_to_seglist(hdrp2);
@@ -292,5 +314,44 @@ void *sf_realloc(void *ptr, size_t size) {
 }
 
 void sf_free(void *ptr) {
+
+    /*CHECK FOR INVALID POINTER*/
+    if(ptr == NULL)
+        abort();
+    if(ptr<get_heap_start() || get_heap_end()<(void*)(HDR2FTR(ptr)+(SF_FOOTER_SIZE/8)))
+        abort();
+
+    sf_header *hdr = GET_SF_HEADER(ptr);
+    sf_footer *ftr = GET_SF_FOOTER(HDR2FTR(hdr));
+
+    if(hdr->allocated == 0 || ftr->allocated == 0)
+        abort();
+
+    if((is_block_header_padded(hdr) == 1 && hdr->padded == 0) || (is_block_header_padded(hdr) == 0 && hdr->padded == 1) || (is_block_footer_padded(ftr) == 1 && hdr->padded == 0) || (is_block_footer_padded(ftr) == 0 && hdr->padded == 1))
+        abort();
+
+    if(hdr->padded != ftr->padded || hdr->allocated != ftr->allocated)
+        abort();
+
+    hdr->allocated = 0;
+    ftr->allocated = 0;
+    coalesce(GET_SF_FREE_HEADER(hdr),1);
+
 	return;
+}
+
+int is_block_header_padded(void *ptr){ //NOT SURE IF I SHOULD MAKE SEPARATE FOR HEADER N FOOTER
+
+    if(((GET_SF_HEADER(ptr)->block_size)%16) == 0)
+        return 0;
+    else
+        return 1;
+}
+
+int is_block_footer_padded(void *ptr){
+
+    if(((GET_SF_FOOTER(ptr)->block_size)%16) == 0)
+        return 0;
+    else
+        return 1;
 }
