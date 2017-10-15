@@ -29,6 +29,7 @@ int sf_errno = 0;
 
 void *sf_malloc(size_t size) {
 
+    printf("page =%d\n",pages );
     size_t asize;  /*ADJUSTED BLOCK SIZE*/
    // size_t extendsize;  /*EXTEND HEAP AMMOUNT WHEN NO FIT FOUND*/
     sf_free_header *bp;
@@ -283,7 +284,7 @@ sf_free_header *split(sf_free_header *bp, size_t size){
     size_t blk_size1 = size;
     size_t blk_size2 = 0;
 
-    if(bp->header.allocated == 0)
+    //if(bp->header.allocated == 0)
         remove_from_seglist(bp);
 
     if((blk_size2 = (GET_BLOCK_SIZE(&(bp->header)) - size))>=32){
@@ -302,8 +303,8 @@ sf_free_header *split(sf_free_header *bp, size_t size){
         //SET_BLOCK_FOOTER_SIZE(ftrp2, blk_size2);
 
         //COALESING IF POSSIBLE AND PUTTING THE FREE BLOCK IN FREE LIST
-        //coalesce(bp, 1);
-        add_to_seglist(hdrp2);
+        coalesce(hdrp2, 1);
+        //add_to_seglist(hdrp2);
 
 
     }
@@ -377,8 +378,8 @@ void *sf_realloc(void *ptr, size_t size) {
 
              split(GET_SF_FREE_HEADER(ptr_hdr), asize);
 
-             sf_free_header *next_free_hdr = GET_SF_FREE_HEADER(NEXTHDR(ptr_hdr));
-             coalesce(next_free_hdr,1);
+             //sf_free_header *next_free_hdr = GET_SF_FREE_HEADER(NEXTHDR(ptr_hdr));
+             //coalesce(next_free_hdr,1);
 
             return set_header_footer_allocblk(GET_SF_FREE_HEADER(ptr_hdr), size, asize);
         }
@@ -395,11 +396,14 @@ void sf_free(void *ptr) {
     /*CHECK FOR INVALID POINTER*/
     if(ptr == NULL)
         abort();
-    if(ptr<get_heap_start() || get_heap_end()<(void*)(HDR2FTR(ptr)+(SF_FOOTER_SIZE/8)))
-        abort();
 
     sf_header *hdr = GET_SF_HEADER(PAYLOAD2HDR(ptr));
     sf_footer *ftr = GET_SF_FOOTER(HDR2FTR(hdr));
+
+    if((void*)hdr<get_heap_start() || get_heap_end()<(void*)(ftr+(SF_FOOTER_SIZE/8))){
+        abort();
+    }
+
 
     if(hdr->allocated == 0 || ftr->allocated == 0)
         abort();

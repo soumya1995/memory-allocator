@@ -1,6 +1,7 @@
 #include <criterion/criterion.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdio.h>
 #include "sfmm.h"
 
 
@@ -90,6 +91,8 @@ Test(sf_memsuite_student, free_coalesce, .init = sf_mem_init, .fini = sf_mem_fin
 }
 
 Test(sf_memsuite_student, freelist, .init = sf_mem_init, .fini = sf_mem_fini) {
+
+	printf("test\n");
 	/* void *u = */ sf_malloc(1);          //32
 	void *v = sf_malloc(LIST_1_MIN); //48
 	void *w = sf_malloc(LIST_2_MIN); //160
@@ -104,6 +107,7 @@ Test(sf_memsuite_student, freelist, .init = sf_mem_init, .fini = sf_mem_fini) {
 	sf_free(x);
 	sf_free(y);
 
+
 	// First block in each list should be the most recently freed block
 	for (int i = 0; i < FREE_LIST_COUNT; i++) {
 		sf_free_header *fh = (sf_free_header *)(seg_free_list[i].head);
@@ -115,6 +119,7 @@ Test(sf_memsuite_student, freelist, .init = sf_mem_init, .fini = sf_mem_fini) {
 	// There should be one free block in each list, 2 blocks in list 3 of size 544 and 1232
 	for (int i = 0; i < FREE_LIST_COUNT; i++) {
 		sf_free_header *fh = (sf_free_header *)(seg_free_list[i].head);
+
 		if (i != 2)
 		    cr_assert_null(fh->next, "More than 1 block in freelist [%d]!", i);
 		else {
