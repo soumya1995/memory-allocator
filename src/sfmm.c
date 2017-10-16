@@ -29,13 +29,12 @@ int sf_errno = 0;
 
 void *sf_malloc(size_t size) {
 
-    printf("page =%d\n",pages );
     size_t asize;  /*ADJUSTED BLOCK SIZE*/
    // size_t extendsize;  /*EXTEND HEAP AMMOUNT WHEN NO FIT FOUND*/
     sf_free_header *bp;
 
     /*IGNORE IF SIZE IS ZERO OR GREATER THAN PAGE SIZE*/
-    if(size == 0 || size>(PAGE*4)){
+    if(size == 0 || size>PAGE*4){
         sf_errno =  EINVAL;
         return NULL;
     }
@@ -45,7 +44,6 @@ void *sf_malloc(size_t size) {
         asize = 2*MEMROW + MEMALIGN;
     else
         asize = (((size+MEMALIGN-1)/MEMALIGN)*MEMALIGN) + (2*MEMROW);
-
 
     //SEARCH FREE LISTS FOR A FIT
     if((bp = find_fit(asize))!= NULL){
@@ -110,30 +108,37 @@ sf_free_header *extend_heap(){
         return NULL;
     }
 
-    if((bp = sf_sbrk()) == (void*)-1)
+    if((bp = sf_sbrk()) == (void*)-1){
         return NULL;
-
-    pages++; //KEEP RECORD OF PAGES USED
-    if(pages!=1){
-        sf_free_header *hdr_free =GET_SF_FREE_HEADER(bp);
-        SET_BLOCK_SIZE(&(hdr_free->header),PAGE_SZ);
-        sf_free_header *hdr_prev = GET_SF_FREE_HEADER(PREVHDR(hdr_free));
-        if(hdr_prev->header.allocated){ /*If previous block is allocated put hdr_free in free list*/
-            add_to_seglist(hdr_free);
-            return hdr_free;
-        }
-        else /*IF PREVIOUS BLOCK IS FREE COALESCE hdr_free with hdr_prev*/
-            return coalesce(hdr_free, 0);
-
     }
 
-    else{
+    pages++; //KEEP RECORD OF PAGES USED
+    /*if(pages!=1){
+        sf_free_header *hdr_free =GET_SF_FREE_HEADER(bp);
+        SET_BLOCK_SIZE(&(hdr_free->header),PAGE_SZ);
+        return coalesce(hdr_free,0);
+        *sf_free_header *hdr_prev = GET_SF_FREE_HEADER(PREVHDR(hdr_free));
+        if(hdr_prev->header.allocated){ *If previous block is allocated put hdr_free in free list*/
+            //add_to_seglist(hdr_free);
+            //return hdr_free;
+       // }
+        //else /*IF PREVIOUS BLOCK IS FREE COALESCE hdr_free with hdr_prev*/
+            /*return coalesce(hdr_free, 0);*/
+
+    //}*/
+
+   // else{
 
         sf_free_header *hdr_free =GET_SF_FREE_HEADER(bp);
         SET_BLOCK_SIZE(&(hdr_free->header), PAGE_SZ);
+
+        SET_BLOCK_FOOTER_SIZE(HDR2FTR(&(hdr_free->header)),GET_BLOCK_SIZE(&(hdr_free->header)));
+        hdr_free->prev = NULL;
+        hdr_free->next = NULL;
         add_to_seglist(hdr_free);
-        return hdr_free;
-    }
+        return coalesce(hdr_free, 0);
+
+   // }
 }
 
 
@@ -143,19 +148,27 @@ sf_free_header *coalesce(sf_free_header *bp, int mode){
     sf_free_header *hdr = NULL;
     /*mode IS 0 COLEASE WITH LOWER ADDRESS */
     if(mode == 0){
-        if(IS_HEAP_START(bp))
+        if(IS_HEAP_START(bp)){
+            //SET_BLOCK_SIZE(&(bp->header), PAGE_SZ);
+            //SET_BLOCK_FOOTER_SIZE(HDR2FTR(bp),GET_BLOCK_SIZE(bp));
             return bp;
-        hdr = GET_SF_FREE_HEADER(PREVHDR(bp));
-        if(hdr->header.allocated)
-            return bp;
+        }
 
+        //hdr = (bp-4096);
+        hdr = GET_SF_FREE_HEADER(PREVHDR(bp));
+        if(hdr->header.allocated){
+            add_to_seglist(bp);
+            return bp;
+        }
         return coalesce_helper(hdr, bp);
     }
 
     /*mode IS 1 COLEASE WITH HIGHER ADDRESS*/
     else{
-        if(IS_HEAP_END(bp))
+        if(IS_HEAP_END(bp)){
+
             return bp;
+        }
         hdr = GET_SF_FREE_HEADER(NEXTHDR(bp));
         if(hdr->header.allocated){
             add_to_seglist(bp);
@@ -173,9 +186,9 @@ sf_free_header *coalesce_helper(sf_free_header *hdr, sf_free_header *bp){
     remove_from_seglist(bp);
 
 
-    sf_footer *newftrp = GET_SF_FOOTER(HDR2FTR(&(bp->header)));
-    SET_BLOCK_SIZE(hdr,(GET_BLOCK_SIZE(&(hdr->header))+GET_BLOCK_SIZE(&(bp->header))));
-    SET_BLOCK_FOOTER_SIZE(newftrp, (GET_BLOCK_SIZE(&(hdr->header))+GET_BLOCK_SIZE(&(bp->header))));
+    size_t size = GET_BLOCK_SIZE(&(hdr->header))+GET_BLOCK_SIZE(&(bp->header));
+    SET_BLOCK_SIZE(GET_SF_HEADER(&(hdr->header)),size);
+    SET_BLOCK_FOOTER_SIZE(GET_SF_FOOTER(HDR2FTR(&(bp->header))), size);
 
     add_to_seglist(hdr);
 
@@ -284,7 +297,6 @@ sf_free_header *split(sf_free_header *bp, size_t size){
     size_t blk_size1 = size;
     size_t blk_size2 = 0;
 
-    //if(bp->header.allocated == 0)
         remove_from_seglist(bp);
 
     if((blk_size2 = (GET_BLOCK_SIZE(&(bp->header)) - size))>=32){
@@ -377,9 +389,6 @@ void *sf_realloc(void *ptr, size_t size) {
                 asize = (((size+MEMALIGN-1)/MEMALIGN)*MEMALIGN) + (2*MEMROW);
 
              split(GET_SF_FREE_HEADER(ptr_hdr), asize);
-
-             //sf_free_header *next_free_hdr = GET_SF_FREE_HEADER(NEXTHDR(ptr_hdr));
-             //coalesce(next_free_hdr,1);
 
             return set_header_footer_allocblk(GET_SF_FREE_HEADER(ptr_hdr), size, asize);
         }

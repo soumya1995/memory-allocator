@@ -18,20 +18,21 @@
 #define GET_SF_FOOTER(ftrp)((sf_footer*)ftrp)
 #define GET_SF_FREE_HEADER(hdrp)((sf_free_header*)hdrp)
 
-#define GET_BLOCK_SIZE(hdrp)(GET_SF_HEADER(hdrp)->block_size << 4)
-#define SET_BLOCK_SIZE(hdrp,size)(GET_SF_HEADER(hdrp)->block_size = (size>>4))
+#define GET_BLOCK_SIZE(hdrp)((GET_SF_HEADER(hdrp))->block_size << 4)
+#define SET_BLOCK_SIZE(hdrp,size)((GET_SF_HEADER(hdrp))->block_size = (size>>4))
 
-#define GET_BLOCK_FOOTER_SIZE(hdrp)(GET_SF_FOOTER(hdrp)->block_size << 4)
-#define SET_BLOCK_FOOTER_SIZE(hdrp,size)(GET_SF_FOOTER(hdrp)->block_size = (size>>4))
+#define GET_BLOCK_FOOTER_SIZE(hdrp)((GET_SF_FOOTER(hdrp))->block_size << 4)
+#define SET_BLOCK_FOOTER_SIZE(hdrp,size)((GET_SF_FOOTER(hdrp))->block_size = (size>>4))
 
 #define HDR2PAYLOAD(hdrp)((char*)hdrp+(SF_HEADER_SIZE/8))
 #define PAYLOAD2HDR(plrp)((char*)plrp-(SF_HEADER_SIZE/8))
 
-#define HDR2FTR(hdrp)((char*)(hdrp)+GET_BLOCK_SIZE(hdrp)-(SF_FOOTER_SIZE/8))
-#define FTR2HDR(ftrp)((char*)ftrp-GET_BLOCK_SIZE(ftrp)+(SF_FOOTER_SIZE/8))
+#define HDR2FTR(hdrp)((char*)(hdrp)+(GET_BLOCK_SIZE(hdrp))-(SF_FOOTER_SIZE/8))
+#define FTR2HDR(ftrp)((char*)(ftrp)+(SF_FOOTER_SIZE/8)-GET_BLOCK_FOOTER_SIZE(ftrp))
 
-#define NEXTHDR(hdrp)((char*)hdrp+GET_BLOCK_SIZE(hdrp))
-#define PREVHDR(hdrp)((char*)hdrp-(GET_BLOCK_FOOTER_SIZE((char*)hdrp-(SF_FOOTER_SIZE/8))))
+#define NEXTHDR(hdrp)((char*)(hdrp)+GET_BLOCK_SIZE(hdrp))
+#define PREVHDR(hdrp)(FTR2HDR((char*)(hdrp)-(SF_FOOTER_SIZE/8)))
+//#define PREVHDR(hdrp)((char*)hdrp-(GET_BLOCK_FOOTER_SIZE(((char*)(hdrp))-(SF_FOOTER_SIZE/8))))
 
 /*SEARCHES FREE LIST FOR A FIT */
 sf_free_header *find_fit(size_t size);
